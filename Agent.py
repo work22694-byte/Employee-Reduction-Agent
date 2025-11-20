@@ -4,6 +4,7 @@ from langchain_groq import ChatGroq
 from dotenv import load_dotenv
 load_dotenv()
 
+
 llm = ChatGroq(model='llama-3.3-70b-versatile')
 
 
@@ -14,35 +15,37 @@ def Extract_And_Insight(path: str,
                         chunk_size: int = 1000):
 
     # --------------------------
-    # Excel Extractor
+    # Excel Extractor (same code)
     # --------------------------
+
     wb = load_workbook(path)
     ws = wb.active
 
-    data = [list(row) for row in ws.iter_rows(values_only=True)]
+    data = []
+    for row in ws.iter_rows(values_only=True):
+        data.append(list(row))
+
     df = pd.DataFrame(data)
 
-    # Set header row
     df.columns = df.iloc[header_index]
     df = df.iloc[header_index+1:]
     df = df.iloc[:, columns_index]
 
-    # --------------------------
-    # Chunking
-    # --------------------------
     chunks = []
     for i in range(0, len(df), chunk_size):
-        chunk = df.iloc[i:i+chunk_size].reset_index(drop=True)
+        chunk = df.iloc[i:i+chunk_size]
+        chunk.reset_index(drop=True, inplace=True)
         chunks.append(chunk)
 
     # --------------------------
-    # Prepare final output
+    # LLM Insight (same code)
     # --------------------------
+
     final_output = []
 
-    for chunk in chunks:
-        # Convert chunk to CSV string without header
-        Str_df = chunk.to_csv(index=False, header=False)
+    for idx, chunk in enumerate(chunks):
+
+        Str_df = chunk.to_string(index=True)
 
         prompt = f"""
 You are an Employee Reducer.
@@ -51,15 +54,15 @@ TASK RULES:
 - You will receive two inputs: Data and Instruction.
 - For each row in the Data, perform the action required by the Instruction.
 - Add TWO new columns on the LEFT side:
-    1. Action # should be only limited like Two or three clear Virdict Adjsut as instructed
-    2. Reason # inside it write a clear reason as instructed
+    1. Action
+    2. Reason
 - Also add an Index column on the far left.
 - Return ONLY the final data as comma-separated values (CSV).
 - Do NOT add markdown, tables, borders, pipes, code fences, backticks, or explanations.
 - Do NOT output ANY extra text — ONLY the CSV table.
 - No comments, no notes, no narration.
 
-CRITICAL CSV RULES:
+CRITICAL CSV RULES (DO NOT BREAK):
 1. If ANY field contains a comma, you MUST wrap it in double quotes.
 2. All rows MUST have the same number of columns.
 3. Do NOT use tab characters.
@@ -67,17 +70,28 @@ CRITICAL CSV RULES:
 5. Output EXACTLY valid CSV.
 
 FORMAT REQUIREMENT:
-Index,Action,Reason,{','.join(df.columns)}
+The output MUST follow this structure:
+
+Index,Action,Reason,<original column 1>,<original column 2>,...
+
+EXAMPLE OF CORRECT CSV FORMAT:
+Index,Action,Reason,JOB DESCRIPTION,Department
+0,Keep,"Core operations required daily","Invoice Processing, Vendor Payments, Ledger Update","Accounts"
+1,Fire,"Tasks can be automated","Customer Calls, Ticket Logging, Issue Escalation","Support"
+
+IMPORTANT:
+- Always wrap JOB DESCRIPTION and any other field in quotes if it contains a comma.
+- The model must NEVER output unquoted comma-containing fields.
 
 Data:
 {Str_df}
 
 Instruction:
 {instruction}
+
 """
+
         result = llm.invoke(prompt).content
         final_output.append(result)
 
-    # Prepend a single header row to the combined output
-    header_row = "Index,Action,Reason," + ",".join(df.columns)
-    return header_row + "\n" + "\n".join(final_output)
+    return "\n".join(final_output)
