@@ -1,0 +1,9 @@
+langchain_groq
+langchain
+langchain-community
+streamlit
+python-dotenv
+openpyxl
+pandas
+io
+re
